@@ -23,8 +23,18 @@ jobs:
 
       - name: Apply Custom Log Patch
         run: |
-          # Kopiujemy Twój plik z folderu patches do pobranego właśnie kodu
-          Copy-Item "patches/list.tsx" "freelens-src/src/renderer/components/dock/logs/list.tsx" -Force
+          # Szukamy pliku list.tsx wewnątrz pobranego kodu Freelens
+          $targetFile = Get-ChildItem -Path "freelens-src" -Filter "list.tsx" -Recurse | Select-Object -First 1
+
+          if ($targetFile) {
+              Write-Host "Znaleziono plik docelowy w ścieżce: $($targetFile.FullName)"
+              # Nadpisujemy znaleziony plik naszym patchem
+              Copy-Item "patches/list.tsx" $targetFile.FullName -Force
+              Write-Host "Poprawka zaaplikowana pomyślnie!"
+          } else {
+              Write-Host "BŁĄD: Nie znaleziono pliku list.tsx w repozytorium Freelens!"
+              exit 1
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
