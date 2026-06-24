@@ -1,0 +1,59 @@
+name: Auto Build Custom Freelens
+
+on:
+  schedule:
+    # Robot sprawdza oficjalne repo codziennie o północy
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    # Pozwala też kliknąć przycisk "Uruchom teraz" ręcznie w panelu GitHub
+
+jobs:
+  check-and-build:
+    runs-on: windows-latest # Budujemy na maszynie z Windowsem w chmurze
+
+    steps:
+      - name: Checkout Our Repo
+        uses: actions/checkout@v4
+
+      - name: Clone Official Freelens
+        run: |
+          git clone https://github.com/freelensapp/freelens.git freelens-src
+          cd freelens-src
+          echo "LATEST_COMMIT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
+
+      - name: Apply Custom Log Patch
+        run: |
+          # Kopiujemy Twój plik z folderu patches do pobranego właśnie kodu
+          Copy-Item "patches/list.tsx" "freelens-src/src/renderer/components/dock/logs/list.tsx" -Force
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-level: "18" # Lub wersja wymagana przez Freelens
+
+      - name: Install PNPM
+        run: npm install -g pnpm
+
+      - name: Install Dependencies & Build
+        run: |
+          cd freelens-src
+          pnpm install
+          pnpm build
+
+      - name: Build Windows Executable
+        run: |
+          cd freelens-src/freelens
+          pnpm exec electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "custom-build-${{ env.LATEST_COMMIT }}"
+          name: "Freelens z Białymi Logami (Commit ${{ env.LATEST_COMMIT }})"
+          body: "Automatyczny build z podmienionym filtrem kolorów ANSI dla błędów."
+          draft: false
+          prerelease: false
+          # Wskazujemy robotowi, gdzie electron-builder wyrzucił gotowego instalatora .exe
+          files: freelens-src/freelens/dist/*.exe
