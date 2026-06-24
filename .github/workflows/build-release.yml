@@ -51,7 +51,12 @@ jobs:
       - name: Build Project
         run: |
           cd freelens-src
-          pnpm build
+          # Flagi wymuszają pokazywanie błędów z każdego pakietu z osobna i zatrzymanie przy porażce
+          pnpm build --stream --bail
+        env:
+          CI: false
+          DISABLE_ESLINT_PLUGIN: true
+          TSC_COMPILE_ON_ERROR: true
 
       - name: Build Windows Executable
         run: |
