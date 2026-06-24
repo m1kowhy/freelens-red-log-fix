@@ -51,8 +51,8 @@ jobs:
       - name: Build Project
         run: |
           cd freelens-src
-          # Flagi wymuszają pokazywanie błędów z każdego pakietu z osobna i zatrzymanie przy porażce
-          pnpm build --stream --bail
+          # Flaga --continue każe Turborepo budować dalej inne pakiety i pokazać pełny raport o błędach na końcu
+          pnpm build -- --continue
         env:
           CI: false
           DISABLE_ESLINT_PLUGIN: true
