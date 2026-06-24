@@ -2,14 +2,15 @@ name: Auto Build Custom Freelens
 
 on:
   schedule:
-    # Robot sprawdza oficjalne repo codziennie o północy
     - cron: "0 0 * * *"
   workflow_dispatch:
-    # Pozwala też kliknąć przycisk "Uruchom teraz" ręcznie w panelu GitHub
 
 jobs:
   check-and-build:
-    runs-on: windows-latest # Budujemy na maszynie z Windowsem w chmurze
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Our Repo
@@ -23,12 +24,9 @@ jobs:
 
       - name: Apply Custom Log Patch
         run: |
-          # Szukamy pliku list.tsx wewnątrz pobranego kodu Freelens
           $targetFile = Get-ChildItem -Path "freelens-src" -Filter "list.tsx" -Recurse | Select-Object -First 1
-
           if ($targetFile) {
               Write-Host "Znaleziono plik docelowy w ścieżce: $($targetFile.FullName)"
-              # Nadpisujemy znaleziony plik naszym patchem
               Copy-Item "patches/list.tsx" $targetFile.FullName -Force
               Write-Host "Poprawka zaaplikowana pomyślnie!"
           } else {
@@ -39,15 +37,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-level: "18" # Lub wersja wymagana przez Freelens
+          node-version: "24" # ZMIANA: Instalujemy wersję 24, której wymaga Freelens
 
       - name: Install PNPM
         run: npm install -g pnpm
 
-      - name: Install Dependencies & Build
+      - name: Install Dependencies
         run: |
           cd freelens-src
-          pnpm install
+          # ZMIANA: Dodajemy flagę bezpieczeństwa, gdyby pnpm dalej marudził o wersje
+          pnpm install --no-frozen-lockfile --ignore-engine
+
+      - name: Build Project
+        run: |
+          cd freelens-src
           pnpm build
 
       - name: Build Windows Executable
@@ -65,5 +68,4 @@ jobs:
           body: "Automatyczny build z podmienionym filtrem kolorów ANSI dla błędów."
           draft: false
           prerelease: false
-          # Wskazujemy robotowi, gdzie electron-builder wyrzucił gotowego instalatora .exe
           files: freelens-src/freelens/dist/*.exe
