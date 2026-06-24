@@ -45,8 +45,8 @@ jobs:
       - name: Install Dependencies
         run: |
           cd freelens-src
-          # ZMIANA: Dodajemy flagę bezpieczeństwa, gdyby pnpm dalej marudził o wersje
-          pnpm install --no-frozen-lockfile --ignore-engine
+          # Usuwamy błędną flagę, zostawiamy samo czyste pobieranie zależności
+          pnpm install --no-frozen-lockfile
 
       - name: Build Project
         run: |
