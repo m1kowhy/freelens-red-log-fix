@@ -22,22 +22,50 @@ jobs:
           cd freelens-src
           echo "LATEST_COMMIT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
 
-      - name: Apply Custom Log Patch
+      - name: Inject Custom Log Patch (Regex Replace)
         run: |
+          # Znajdź oryginalny plik list.tsx we Freelensie
           $targetFile = Get-ChildItem -Path "freelens-src" -Filter "list.tsx" -Recurse | Select-Object -First 1
-          if ($targetFile) {
-              Write-Host "Znaleziono plik docelowy w ścieżce: $($targetFile.FullName)"
-              Copy-Item "patches/list.tsx" $targetFile.FullName -Force
-              Write-Host "Poprawka zaaplikowana pomyślnie!"
-          } else {
-              Write-Host "BŁĄD: Nie znaleziono pliku list.tsx w repozytorium Freelens!"
+          if (!$targetFile) {
+              Write-Host "BŁĄD: Nie znaleziono pliku list.tsx!"
               exit 1
           }
+
+          Write-Host "Patchowanie pliku: $($targetFile.FullName)"
+          $code = Get-Content $targetFile.FullName -Raw
+
+          # 1. Definiujemy Twoje funkcje czyszczące
+          $customFunctions = @"
+
+          const colorConverter = new AnsiUp();
+
+          colorConverter.use_classes = false;
+          colorConverter.escape_html = true;
+
+          function removeAnsiColors(text: string): string {
+            return text.replace(/\x1B\[[0-9;]*m/g, '');
+          }
+
+          function ansiToHtmlCustom(text: string): string {
+            return DOMPurify.sanitize(colorConverter.ansi_to_html(removeAnsiColors(text)));
+          }
+          "@
+
+          # 2. Zastępujemy oryginalną inicjalizację 'const colorConverter = new AnsiUp();' naszymi funkcjami
+          $code = $code -replace 'const colorConverter = new AnsiUp\(\);', $customFunctions
+
+          # 3. Zastępujemy wywołanie oryginalnej metody wewnątrz getLogRow na naszą bezpieczną funkcję
+          # Szukamy starej linijki z ansiToHtml i przekierowujemy ją do ansiToHtmlCustom
+          $code = $code -replace 'const ansiToHtml = \(ansi: string\) => DOMPurify\.sanitize\(colorConverter\.ansi_to_html\(ansi\)\);', 'const ansiToHtml = (ansi: string) => ansiToHtmlCustom(ansi);'
+
+          # Zapisujemy zmodyfikowany plik z powrotem
+          Set-Content $targetFile.FullName $code -NoNewline
+          Write-Host "Poprawka zaaplikowana w locie za pomocą Regex!"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24" # ZMIANA: Instalujemy wersję 24, której wymaga Freelens
+          node-version: "24"
 
       - name: Install PNPM
         run: npm install -g pnpm
@@ -45,18 +73,14 @@ jobs:
       - name: Install Dependencies
         run: |
           cd freelens-src
-          # Usuwamy błędną flagę, zostawiamy samo czyste pobieranie zależności
           pnpm install --no-frozen-lockfile
 
       - name: Build Project
         run: |
           cd freelens-src
-          # Flaga --continue każe Turborepo budować dalej inne pakiety i pokazać pełny raport o błędach na końcu
-          pnpm build -- --continue
+          pnpm build
         env:
           CI: false
-          DISABLE_ESLINT_PLUGIN: true
-          TSC_COMPILE_ON_ERROR: true
 
       - name: Build Windows Executable
         run: |
@@ -70,7 +94,7 @@ jobs:
         with:
           tag_name: "custom-build-${{ env.LATEST_COMMIT }}"
           name: "Freelens z Białymi Logami (Commit ${{ env.LATEST_COMMIT }})"
-          body: "Automatyczny build z podmienionym filtrem kolorów ANSI dla błędów."
+          body: "Automatyczny build z wstrzykniętym filtrem kolorów ANSI dla błędów."
           draft: false
           prerelease: false
           files: freelens-src/freelens/dist/*.exe
